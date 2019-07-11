@@ -1,0 +1,50 @@
+{
+  "name": "solidity-boilerplate",
+  "version": "1.0.0",
+  "description": "Boilerplate for smart contract development on solidity",
+  "scripts": {
+    "compile": "rm -rf build && truffle compile --compile-all",
+    "commit": "git cz",
+    "coverage": "SOLIDITY_COVERAGE=true scripts/test.sh",
+    "release": "standard-version",
+    "rpc": "ganache-cli -l 7000000 -s experimental -i 311",
+    "test": "rm -rf build && scripts/test.sh",
+    "truffle:migrate": "truffle migrate --reset --compile-all"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/alejoamiras/solidity-boilerplate.git"
+  },
+  "keywords": [
+    "solidity"
+  ],
+  "author": "Alejo Amiras",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://gitlab.com/alejoamiras/solidity-boilerplate/issues"
+  },
+  "homepage": "https://gitlab.com/alejoamiras/solidity-boilerplate#readme",
+  "devDependencies": {
+    "chai": "4.2.0",
+    "chai-bignumber": "3.0.0",
+    "commitizen": "3.1.1",
+    "coveralls": "3.0.4",
+    "cz-conventional-changelog": "2.1.0",
+    "eth-gas-reporter": "0.2.2",
+    "fs-extra": "8.1.0",
+    "ganache-cli": "6.4.4",
+    "solidity-coverage": "0.5.11",
+    "standard-version": "6.0.1"
+  },
+  "dependencies": {
+    "openzeppelin-solidity": "2.3.0",
+    "openzeppelin-test-helpers": "0.4.0",
+    "truffle": "5.0.26",
+    "web3": "1.0.0-beta.55"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  }
+}
