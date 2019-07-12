@@ -1,7 +1,7 @@
 {
-  "name": "solidity-boilerplate",
+  "name": "lending-proxy",
   "version": "1.0.0",
-  "description": "Boilerplate for smart contract development on solidity",
+  "description": "Compound lending proxy",
   "scripts": {
     "compile": "rm -rf build && truffle compile --compile-all",
     "commit": "git cz",
@@ -13,17 +13,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://gitlab.com/alejoamiras/solidity-boilerplate.git"
+    "url": "git+https://github.com/lbertenasco/lending-proxy.git"
   },
   "keywords": [
     "solidity"
   ],
-  "author": "Alejo Amiras",
+  "author": "Luciano Bertenasco",
   "license": "ISC",
   "bugs": {
-    "url": "https://gitlab.com/alejoamiras/solidity-boilerplate/issues"
+    "url": "https://github.com/lbertenasco/lending-proxy/issues"
   },
-  "homepage": "https://gitlab.com/alejoamiras/solidity-boilerplate#readme",
+  "homepage": "https://github.com/lbertenasco/lending-proxy#readme",
   "devDependencies": {
     "chai": "4.2.0",
     "chai-bignumber": "3.0.0",
