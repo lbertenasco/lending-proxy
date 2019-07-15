@@ -31,13 +31,22 @@ contract SupplyPool is Ownable, TokenErrorReporter {
    */
   mapping (address => uint256) public accountTokens;
 
+  mapping (address => uint256) public accountRatioUpdatedAt;
+
   /**
    * @notice Official record of underlying balances for each account
    */
   mapping (address => uint256) public accountUnderlying;
 
+
+  uint public ownerFeeExp; // * 1e18;
+
+  uint public earningsExchangeRateExp;
+  uint public earningsRatioUpdatedAt;
+
   uint public totalTokens;
   uint public totalLockedUnderlying;
+  uint public totalEarnings;
 
   constructor(address underlying_, CErc20 cErc20_) public {
     // Set underlying, Compound and cErc20 addresses.
@@ -74,8 +83,12 @@ contract SupplyPool is Ownable, TokenErrorReporter {
 
     uint mintedTokens = postMintTokenBalance.sub(preMintTokenBalance);
 
+    // First we update token values
     totalTokens = totalTokens.add(mintedTokens);
+    updateAccountTokens(msg.sender);
     accountTokens[msg.sender] = accountTokens[msg.sender].add(mintedTokens);
+
+    // Then we update underlying values
     accountUnderlying[msg.sender] = accountUnderlying[msg.sender].add(mintAmount);
     totalLockedUnderlying = totalLockedUnderlying.add(mintAmount);
 
@@ -104,10 +117,13 @@ contract SupplyPool is Ownable, TokenErrorReporter {
     uint transferError = uint(doTransferOut(msg.sender, redeemAmount));
     require(transferError == uint(Error.NO_ERROR), "underlying transfer failed");
 
-    // TODO Take %
 
+    // First we update token values
     totalTokens = totalTokens.sub(redeemedTokens);
+    updateAccountTokens(msg.sender);
     accountTokens[msg.sender] = accountTokens[msg.sender].sub(redeemedTokens);
+
+    // Then we update underlying values
     accountUnderlying[msg.sender] = accountUnderlying[msg.sender].sub(redeemAmount);
     totalLockedUnderlying = totalLockedUnderlying.sub(redeemAmount);
 
@@ -116,9 +132,62 @@ contract SupplyPool is Ownable, TokenErrorReporter {
     return redeemError;
   }
 
-  function getTotalEarning() public returns (uint) {
+  function updateAccountTokens(address account) public {
+    if (accountRatioUpdatedAt[account] < earningsRatioUpdatedAt) {
+      accountTokens[msg.sender] = getUpdatedAccountTokens(account);
+      accountRatioUpdatedAt[account] = block.number;
+    }
+  }
+
+  function getUpdatedAccountTokens(address account) public view returns (uint) {
+    if (accountRatioUpdatedAt[account] < earningsRatioUpdatedAt) {
+      return accountUnderlying[msg.sender].mul(1e18).div(earningsExchangeRateExp);
+    }
+    return accountTokens[msg.sender];
+  }
+
+
+  function getCurrentEarning() public returns (uint) {
     uint underlyingBalance = cErc20.balanceOfUnderlying(address(this));
     return underlyingBalance.sub(totalLockedUnderlying);
+  }
+
+  function balanceOf(address account) external view returns (uint) {
+    return getUpdatedAccountTokens(account);
+  }
+
+  function earningsOf(address account) external view returns (uint) {
+    return getUpdatedAccountTokens(account).sub(accountUnderlying[msg.sender]);
+  }
+
+
+  /* ADMIN HELPERS */
+
+  function takeEarnings() public onlyOwner {
+    uint currentEarnings = getCurrentEarning();
+
+    require(currentEarnings > 0);
+
+    uint preTokenBalance = cErc20.balanceOf(address(this));
+
+    uint redeemError = cErc20.redeemUnderlying(currentEarnings);
+    require(redeemError == uint(Error.NO_ERROR), "underlying redeeming failed");
+
+    uint postTokenBalance = cErc20.balanceOf(address(this));
+
+    uint redeemedTokens = preTokenBalance.sub(postTokenBalance);
+
+    uint transferError = uint(doTransferOut(msg.sender, currentEarnings));
+    require(transferError == uint(Error.NO_ERROR), "underlying transfer failed");
+
+    totalTokens = totalTokens.sub(redeemedTokens);
+    totalEarnings = totalEarnings.add(currentEarnings);
+
+    earningsExchangeRateExp = cErc20.exchangeRateStored();
+    earningsRatioUpdatedAt = block.number;
+
+    emit Redeem(msg.sender, currentEarnings, redeemedTokens);
+
   }
 
 

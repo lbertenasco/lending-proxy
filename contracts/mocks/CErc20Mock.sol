@@ -82,21 +82,6 @@ contract CErc20Mock is TokenErrorReporter {
     }
 
     /**
-     * @notice Sender redeems cTokens in exchange for the underlying asset
-     * @dev Accrues interest whether or not the operation succeeds, unless reverted
-     * @param redeemTokens The number of cTokens to redeem into underlying
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-     */
-    function redeem(uint redeemTokens) external returns (uint) {
-      /* return redeemInternal(redeemTokens); */
-      // TODO Add % of exchangeRate here
-      totalSupply = totalSupply.sub(redeemTokens);
-      accountTokens[msg.sender] = accountTokens[msg.sender].sub(redeemTokens);
-      // TODO FIX ME
-      return uint(doTransferOut(msg.sender, redeemTokens));
-    }
-
-    /**
      * @notice Sender redeems cTokens in exchange for a specified amount of underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
      * @param redeemAmount The amount of underlying to redeem
@@ -130,21 +115,25 @@ contract CErc20Mock is TokenErrorReporter {
     function balanceOfUnderlying(address owner) public returns (uint) {
       uint underlyingBalance = EIP20Interface(underlying).balanceOf(address(this));
       if (accountTokens[owner] == 0) return 0;
-      uint tokenExpValue = getExpTokenValue();
       return (totalSupply.mul(1e18).div(accountTokens[owner])).mul(underlyingBalance).div(1e18);
-      /* return tokenExpValue.mul().div(1e18); */
-      /* return totalSupply.div(accountTokens[owner]).mul(underlyingBalance); */
     }
 
 
     function getExpTokenValue() public view returns (uint) {
       uint totalUnderlying = EIP20Interface(underlying).balanceOf(address(this));
-      uint tokenValue = 1e18;
+      uint tokenValueExp = 1e18;
       if (totalSupply > 0 && totalUnderlying > 0) {
         totalUnderlying = totalUnderlying.mul(1e18);
-        tokenValue = totalUnderlying.div(totalSupply);
+        tokenValueExp = totalUnderlying.div(totalSupply);
       }
-      return tokenValue;
+      return tokenValueExp;
+    }
+
+    function exchangeRateStored() public view returns (uint) {
+        /* (MathError err, uint result) = exchangeRateStoredInternal();
+        require(err == MathError.NO_ERROR, "exchangeRateStored: exchangeRateStoredInternal failed");
+        return result; */
+        return getExpTokenValue();
     }
 
 

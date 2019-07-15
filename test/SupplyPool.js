@@ -47,9 +47,9 @@ contract('SupplyPool Test', (accounts) => {
 
     const accountTokens = await supplyPool.accountTokens.call(Alice);
 
-    const totalEarnings = await supplyPool.getTotalEarning.call();
+    const currentEarnings = await supplyPool.getCurrentEarning.call();
 
-    totalEarnings.should.be.bignumber.equal(ZERO);
+    currentEarnings.should.be.bignumber.equal(ZERO);
     accountTokens.should.be.bignumber.equal(mintValue);
   });
 
@@ -71,7 +71,7 @@ contract('SupplyPool Test', (accounts) => {
     const balanceOfdaiC2 = await dai.balanceOf.call(cdai.address);
     balanceOfdaiC2.should.be.bignumber.equal(profit);
 
-    const totalEarnings = await supplyPool.getTotalEarning.call();
+    const currentEarnings = await supplyPool.getCurrentEarning.call();
 
     const accountTokens = await supplyPool.accountTokens.call(Alice);
     const totalTokens = await supplyPool.totalTokens.call();
@@ -82,7 +82,8 @@ contract('SupplyPool Test', (accounts) => {
     const balanceOfcdai = await cdai.balanceOf.call(supplyPool.address);
     const balanceOfUnderlying = await cdai.balanceOfUnderlying.call(supplyPool.address);
 
-    totalEarnings.should.be.bignumber.equal(profit);
+    balanceOfUnderlying.should.be.bignumber.equal(profit);
+    currentEarnings.should.be.bignumber.equal(profit);
     accountTokens.should.be.bignumber.equal(balanceOfcdai);
 
     balanceOfAlice1.should.be.bignumber.equal(INITIAL_DAI_BALANCE.sub(mintValue));
@@ -90,7 +91,7 @@ contract('SupplyPool Test', (accounts) => {
 
     balanceOfdai.should.be.bignumber.equal(ZERO);
     balanceOfcdai.should.be.bignumber.equal(totalTokens);
-    balanceOfUnderlying.should.be.bignumber.equal(totalEarnings);
+    balanceOfUnderlying.should.be.bignumber.equal(currentEarnings);
   });
 
 
@@ -101,9 +102,9 @@ contract('SupplyPool Test', (accounts) => {
     await supplyPool.mint(mintValue, { from: Alice });
 
     const accountTokens = await supplyPool.accountTokens.call(Alice);
-    const totalEarnings = await supplyPool.getTotalEarning.call();
+    const currentEarnings = await supplyPool.getCurrentEarning.call();
 
-    totalEarnings.should.be.bignumber.equal(ZERO);
+    currentEarnings.should.be.bignumber.equal(ZERO);
     accountTokens.should.be.bignumber.equal(mintValue.mul(new BN(2)));
   });
 
@@ -114,10 +115,10 @@ contract('SupplyPool Test', (accounts) => {
     await cdai.supplyUnderlying(mintValue, { from: Carol })
     await supplyPool.mint(mintValue, { from: Alice });
 
-    const totalEarnings = await supplyPool.getTotalEarning.call();
+    const currentEarnings = await supplyPool.getCurrentEarning.call();
     const accountTokens = await supplyPool.accountTokens.call(Alice);
 
-    totalEarnings.should.be.bignumber.equal(mintValue);
+    currentEarnings.should.be.bignumber.equal(mintValue);
     accountTokens.should.be.bignumber.equal(mintValue.div(new BN(2)).mul(new BN(3)));
   });
 
@@ -135,10 +136,113 @@ contract('SupplyPool Test', (accounts) => {
     balanceOfUnderlying.should.be.bignumber.equal(mintValue.mul(new BN(2)).add(profit));
     totalLockedUnderlying.should.be.bignumber.equal(mintValue.mul(new BN(2)));
 
-    const totalEarnings = await supplyPool.getTotalEarning.call();
+    const currentEarnings = await supplyPool.getCurrentEarning.call();
     const accountTokens = await supplyPool.accountTokens.call(Alice);
 
-    totalEarnings.should.be.bignumber.equal(profit);
+    currentEarnings.should.be.bignumber.equal(profit);
     accountTokens.should.be.bignumber.equal(mintValue.mul(new BN(2)).sub(profit));
   });
+
+  it('SupplyPool take earnings as non owner should revert', async () => {
+    await assertRevert(async () => {
+      await supplyPool.takeEarnings({ from: Alice });
+    });
+  });
+
+  it('SupplyPool take earnings 0 should revert', async () => {
+    const currentEarnings = await supplyPool.getCurrentEarning.call();
+    currentEarnings.should.be.bignumber.equal(ZERO);
+    await assertRevert(async () => {
+      await supplyPool.takeEarnings({ from: Alice });
+    });
+  });
+
+  it('SupplyPool take earnings as owner', async () => {
+    const mintValue = INITIAL_DAI_BALANCE.divRound(new BN(4));
+    const profit = new BN(100);
+
+    await supplyPool.mint(mintValue, { from: Alice });
+    await cdai.supplyUnderlying(profit, { from: Carol })
+    await supplyPool.redeemUnderlying(mintValue, { from: Alice });
+
+    const totalLockedUnderlying = await supplyPool.totalLockedUnderlying.call();
+    const balanceOfUnderlying = await cdai.balanceOfUnderlying.call(supplyPool.address);
+
+    balanceOfUnderlying.should.be.bignumber.equal(profit);
+    totalLockedUnderlying.should.be.bignumber.equal(ZERO);
+
+    await supplyPool.takeEarnings({ from: Alice });
+
+    const balanceOfUnderlyingAfterTakeEarnings = await cdai.balanceOfUnderlying.call(supplyPool.address);
+    balanceOfUnderlyingAfterTakeEarnings.should.be.bignumber.equal(ZERO);
+
+    const currentEarnings = await supplyPool.getCurrentEarning.call();
+    const accountTokens = await supplyPool.accountTokens.call(Alice);
+    const totalEarnings = await supplyPool.totalEarnings.call();
+
+    currentEarnings.should.be.bignumber.equal(ZERO);
+    totalEarnings.should.be.bignumber.equal(profit);
+    accountTokens.should.be.bignumber.equal(profit);
+  });
+
+  it('SupplyPool mint take earnings as owner and then mint again', async () => {
+    const mintValue = INITIAL_DAI_BALANCE.divRound(new BN(4));
+    const profit = new BN(100);
+
+    await supplyPool.mint(mintValue, { from: Alice });
+    await cdai.supplyUnderlying(profit, { from: Carol })
+    await supplyPool.redeemUnderlying(mintValue, { from: Alice });
+
+    const totalLockedUnderlying = await supplyPool.totalLockedUnderlying.call();
+    const balanceOfUnderlying = await cdai.balanceOfUnderlying.call(supplyPool.address);
+    const accountUnderlyingBeforeEarnings = await supplyPool.accountUnderlying.call(Alice);
+    const accountTokensBeforeEarnings = await supplyPool.accountTokens.call(Alice);
+    const earningsOfAliceBeforeTakeEarnings = await supplyPool.earningsOf.call(Alice);
+
+    balanceOfUnderlying.should.be.bignumber.equal(profit);
+    accountUnderlyingBeforeEarnings.should.be.bignumber.equal(ZERO);
+    totalLockedUnderlying.should.be.bignumber.equal(ZERO);
+    accountTokensBeforeEarnings.should.be.bignumber.equal(profit);
+    earningsOfAliceBeforeTakeEarnings.should.be.bignumber.equal(profit);
+
+    await supplyPool.takeEarnings({ from: Alice });
+
+    const balanceOfUnderlyingAfterTakeEarnings = await cdai.balanceOfUnderlying.call(supplyPool.address);
+    balanceOfUnderlyingAfterTakeEarnings.should.be.bignumber.equal(ZERO);
+
+    const currentEarnings = await supplyPool.getCurrentEarning.call();
+    const accountTokens = await supplyPool.accountTokens.call(Alice);
+    const totalEarnings = await supplyPool.totalEarnings.call();
+    const accountUnderlyingAfterEarnings = await supplyPool.accountUnderlying.call(Alice);
+    const earningsOfAliceAfterTakeEarnings = await supplyPool.earningsOf.call(Alice);
+
+    currentEarnings.should.be.bignumber.equal(ZERO);
+    totalEarnings.should.be.bignumber.equal(profit);
+    accountTokens.should.be.bignumber.equal(profit);
+    accountUnderlyingAfterEarnings.should.be.bignumber.equal(ZERO);
+    earningsOfAliceAfterTakeEarnings.should.be.bignumber.equal(ZERO);
+
+    // Getting tokens difectly from mapping will return pre-take.earnings value.
+    const accountTokensBeforeMint = await supplyPool.accountTokens.call(Alice);
+    accountTokensBeforeMint.should.be.bignumber.equal(profit);
+
+    // We need to query balanceOf that calls getUpdatedAccountTokens internally to get the real value
+    const preMintBalanceOfAlice = await supplyPool.balanceOf.call(Alice);
+    preMintBalanceOfAlice.should.be.bignumber.equal(ZERO);
+
+    await supplyPool.mint(mintValue, { from: Alice });
+
+    const accountUnderlyingAfterMint = await supplyPool.accountUnderlying.call(Alice);
+    accountUnderlyingAfterMint.should.be.bignumber.equal(mintValue);
+
+    // After imnting values are updated and in sync
+    const accountTokensAfterEarnings = await supplyPool.accountTokens.call(Alice);
+    const balanceOfAlice = await supplyPool.balanceOf.call(Alice);
+    const earningsOfAlice = await supplyPool.earningsOf.call(Alice);
+    accountTokensAfterEarnings.should.be.bignumber.equal(mintValue);
+    accountTokensAfterEarnings.should.be.bignumber.equal(balanceOfAlice);
+    earningsOfAlice.should.be.bignumber.equal(ZERO);
+
+  });
+
 });
