@@ -241,7 +241,7 @@ contract('SupplyPool Test', (accounts) => {
     const earningsOfAlice = await supplyPool.earningsOf.call(Alice);
     accountTokensAfterEarnings.should.be.bignumber.equal(mintValue);
     accountTokensAfterEarnings.should.be.bignumber.equal(balanceOfAlice);
-    earningsOfAlice.should.be.bignumber.equal(ZERO);
+    earningsOfAlice.should.be.bignumber.equal(profit.add(ZERO));
 
   });
 

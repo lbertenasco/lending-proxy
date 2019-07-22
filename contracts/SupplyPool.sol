@@ -33,6 +33,8 @@ contract SupplyPool is Ownable, TokenErrorReporter {
 
   mapping (address => uint256) public accountRatioUpdatedAt;
 
+  mapping (address => uint256) public accountPastEarnings;
+
   /**
    * @notice Official record of underlying balances for each account
    */
@@ -73,8 +75,10 @@ contract SupplyPool is Ownable, TokenErrorReporter {
    * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
    */
   function mint(uint mintAmount) external returns (uint) {
-    uint transferError = uint(doTransferIn(msg.sender, mintAmount));
-    require(transferError == uint(Error.NO_ERROR), "underlying transfer failed");
+    // TODO On Prod Use accure interest first to have a stable interest rate through the entire excecution
+
+    EIP20NonStandardInterface token = EIP20NonStandardInterface(underlying);
+    token.transferFrom(msg.sender, address(this), mintAmount);
 
     uint preMintTokenBalance = cErc20.balanceOf(address(this));
     uint mintError = cErc20.mint(mintAmount);
@@ -105,6 +109,9 @@ contract SupplyPool is Ownable, TokenErrorReporter {
    */
   function redeemUnderlying(uint redeemAmount) external returns (uint) {
     require(accountUnderlying[msg.sender] >= redeemAmount, "redeem amount exceeds account underlying balance");
+
+    // TODO On Prod Use accure interest first to have a stable interest rate through the entire excecution
+
     uint preTokenBalance = cErc20.balanceOf(address(this));
 
     uint redeemError = cErc20.redeemUnderlying(redeemAmount);
@@ -114,9 +121,8 @@ contract SupplyPool is Ownable, TokenErrorReporter {
 
     uint redeemedTokens = preTokenBalance.sub(postTokenBalance);
 
-    uint transferError = uint(doTransferOut(msg.sender, redeemAmount));
-    require(transferError == uint(Error.NO_ERROR), "underlying transfer failed");
-
+    EIP20NonStandardInterface token = EIP20NonStandardInterface(underlying);
+    token.transfer(msg.sender, redeemAmount);
 
     // First we update token values
     totalTokens = totalTokens.sub(redeemedTokens);
@@ -134,8 +140,13 @@ contract SupplyPool is Ownable, TokenErrorReporter {
 
   function updateAccountTokens(address account) public {
     if (accountRatioUpdatedAt[account] < earningsRatioUpdatedAt) {
-      accountTokens[msg.sender] = getUpdatedAccountTokens(account);
+      uint preUpdateTokens = accountTokens[account];
+      accountTokens[account] = getUpdatedAccountTokens(account);
       accountRatioUpdatedAt[account] = block.number;
+
+      uint tokensTakenFromAccount = preUpdateTokens.sub(accountTokens[account]);
+      uint underlyingEarningsOfAccount = tokensTakenFromAccount.mul(earningsExchangeRateExp).div(1e18);
+      accountPastEarnings[account] = accountPastEarnings[account].add(underlyingEarningsOfAccount);
     }
   }
 
@@ -157,7 +168,11 @@ contract SupplyPool is Ownable, TokenErrorReporter {
   }
 
   function earningsOf(address account) external view returns (uint) {
-    return getUpdatedAccountTokens(account).sub(accountUnderlying[msg.sender]);
+    return getUpdatedAccountTokens(account).add(accountPastEarnings[account]).sub(accountUnderlying[account]);
+  }
+
+  function pastEarningsOf(address account) external view returns (uint) {
+    return accountPastEarnings[account];
   }
 
 
@@ -177,8 +192,8 @@ contract SupplyPool is Ownable, TokenErrorReporter {
 
     uint redeemedTokens = preTokenBalance.sub(postTokenBalance);
 
-    uint transferError = uint(doTransferOut(msg.sender, currentEarnings));
-    require(transferError == uint(Error.NO_ERROR), "underlying transfer failed");
+    EIP20NonStandardInterface token = EIP20NonStandardInterface(underlying);
+    token.transfer(msg.sender, currentEarnings);
 
     totalTokens = totalTokens.sub(redeemedTokens);
     totalEarnings = totalEarnings.add(currentEarnings);
@@ -190,98 +205,4 @@ contract SupplyPool is Ownable, TokenErrorReporter {
 
   }
 
-
-  /* ERC20 HELPERS */
-
-  /**
-   * @dev Checks whether or not there is sufficient allowance for this contract to move amount from `from` and
-   *      whether or not `from` has a balance of at least `amount`. Does NOT do a transfer.
-   */
-  function checkTransferIn(address from, uint amount) internal view returns (Error) {
-      EIP20Interface token = EIP20Interface(underlying);
-
-      if (token.allowance(from, address(this)) < amount) {
-          return Error.TOKEN_INSUFFICIENT_ALLOWANCE;
-      }
-
-      if (token.balanceOf(from) < amount) {
-          return Error.TOKEN_INSUFFICIENT_BALANCE;
-      }
-
-      return Error.NO_ERROR;
-  }
-
-  /**
-   * @dev Similar to EIP20 transfer, except it handles a False result from `transferFrom` and returns an explanatory
-   *      error code rather than reverting.  If caller has not called `checkTransferIn`, this may revert due to
-   *      insufficient balance or insufficient allowance. If caller has called `checkTransferIn` prior to this call,
-   *      and it returned Error.NO_ERROR, this should not revert in normal conditions.
-   *
-   *      Note: This wrapper safely handles non-standard ERC-20 tokens that do not return a value.
-   *            See here: https://medium.com/coinmonks/missing-return-value-bug-at-least-130-tokens-affected-d67bf08521ca
-   */
-  function doTransferIn(address from, uint amount) internal returns (Error) {
-      EIP20NonStandardInterface token = EIP20NonStandardInterface(underlying);
-      bool result;
-
-      token.transferFrom(from, address(this), amount);
-
-      // solium-disable-next-line security/no-inline-assembly
-      assembly {
-          switch returndatasize()
-              case 0 {                      // This is a non-standard ERC-20
-                  result := not(0)          // set result to true
-              }
-              case 32 {                     // This is a complaint ERC-20
-                  returndatacopy(0, 0, 32)
-                  result := mload(0)        // Set `result = returndata` of external call
-              }
-              default {                     // This is an excessively non-compliant ERC-20, revert.
-                  revert(0, 0)
-              }
-      }
-
-      if (!result) {
-          return Error.TOKEN_TRANSFER_IN_FAILED;
-      }
-
-      return Error.NO_ERROR;
-  }
-
-  /**
-   * @dev Similar to EIP20 transfer, except it handles a False result from `transfer` and returns an explanatory
-   *      error code rather than reverting. If caller has not called checked protocol's balance, this may revert due to
-   *      insufficient cash held in this contract. If caller has checked protocol's balance prior to this call, and verified
-   *      it is >= amount, this should not revert in normal conditions.
-   *
-   *      Note: This wrapper safely handles non-standard ERC-20 tokens that do not return a value.
-   *            See here: https://medium.com/coinmonks/missing-return-value-bug-at-least-130-tokens-affected-d67bf08521ca
-   */
-  function doTransferOut(address payable to, uint amount) internal returns (Error) {
-      EIP20NonStandardInterface token = EIP20NonStandardInterface(underlying);
-      bool result;
-
-      token.transfer(to, amount);
-
-      // solium-disable-next-line security/no-inline-assembly
-      assembly {
-          switch returndatasize()
-              case 0 {                      // This is a non-standard ERC-20
-                  result := not(0)          // set result to true
-              }
-              case 32 {                     // This is a complaint ERC-20
-                  returndatacopy(0, 0, 32)
-                  result := mload(0)        // Set `result = returndata` of external call
-              }
-              default {                     // This is an excessively non-compliant ERC-20, revert.
-                  revert(0, 0)
-              }
-      }
-
-      if (!result) {
-          return Error.TOKEN_TRANSFER_OUT_FAILED;
-      }
-
-      return Error.NO_ERROR;
-  }
 }
