@@ -1,11 +1,12 @@
 pragma solidity ^0.5.8;
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
+import 'openzeppelin-solidity/contracts/token/ERC20/ERC20.sol';
 
 import '../compound/EIP20NonStandardInterface.sol';
 import '../compound/EIP20Interface.sol';
 import '../compound/ErrorReporter.sol';
 
-contract CErc20Mock is TokenErrorReporter {
+contract CErc20Mock is TokenErrorReporter, ERC20 {
     using SafeMath for uint;
 
     bool public constant isCToken = true;
@@ -30,15 +31,6 @@ contract CErc20Mock is TokenErrorReporter {
      */
     uint public decimals;
 
-    /**
-     * @notice Total number of tokens in circulation
-     */
-    uint256 public totalSupply;
-
-    /**
-     * @notice Official record of token balances for each account
-     */
-    mapping (address => uint256) public accountTokens;
 
     /**
      * @notice Construct a new money market
@@ -72,8 +64,8 @@ contract CErc20Mock is TokenErrorReporter {
 
       uint mintedTokens = (mintAmount.mul(1e18)).div(tokenExpValue);
 
-      totalSupply = totalSupply.add(mintedTokens);
-      accountTokens[msg.sender] = accountTokens[msg.sender].add(mintedTokens);
+      _mint(msg.sender, mintedTokens);
+
       return uint(doTransferIn(msg.sender, mintAmount));
     }
 
@@ -92,18 +84,9 @@ contract CErc20Mock is TokenErrorReporter {
 
       uint redeemTokens = redeemAmount.mul(1e18).div(tokenExpValue);
 
-      totalSupply = totalSupply.sub(redeemTokens);
-      accountTokens[msg.sender] = accountTokens[msg.sender].sub(redeemTokens);
-      return uint(doTransferOut(msg.sender, redeemAmount));
-    }
+      _burn(msg.sender, redeemTokens);
 
-    /**
-     * @notice Get the token balance of the `owner`
-     * @param owner The address of the account to query
-     * @return The number of tokens owned by `owner`
-     */
-    function balanceOf(address owner) external view returns (uint256) {
-      return accountTokens[owner];
+      return uint(doTransferOut(msg.sender, redeemAmount));
     }
 
     /**
@@ -114,17 +97,17 @@ contract CErc20Mock is TokenErrorReporter {
      */
     function balanceOfUnderlying(address owner) public returns (uint) {
       uint underlyingBalance = EIP20Interface(underlying).balanceOf(address(this));
-      if (accountTokens[owner] == 0) return 0;
-      return (totalSupply.mul(1e18).div(accountTokens[owner])).mul(underlyingBalance).div(1e18);
+      if (balanceOf(owner) == 0) return 0;
+      return (totalSupply().mul(1e18).div(balanceOf(owner))).mul(underlyingBalance).div(1e18);
     }
 
 
     function getExpTokenValue() public view returns (uint) {
       uint totalUnderlying = EIP20Interface(underlying).balanceOf(address(this));
       uint tokenValueExp = 1e18;
-      if (totalSupply > 0 && totalUnderlying > 0) {
+      if (totalSupply() > 0 && totalUnderlying > 0) {
         totalUnderlying = totalUnderlying.mul(1e18);
-        tokenValueExp = totalUnderlying.div(totalSupply);
+        tokenValueExp = totalUnderlying.div(totalSupply());
       }
       return tokenValueExp;
     }
