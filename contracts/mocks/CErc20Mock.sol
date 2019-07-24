@@ -7,7 +7,7 @@ import '../compound/EIP20Interface.sol';
 import '../compound/ErrorReporter.sol';
 import '../compound/ReentrancyGuard.sol';
 
-contract CErc20Mock is TokenErrorReporter, ERC20 {
+contract CErc20Mock is ReentrancyGuard, TokenErrorReporter, ERC20 {
     using SafeMath for uint;
 
     bool public constant isCToken = true;
