@@ -96,7 +96,7 @@ contract CErc20Mock is ReentrancyGuard, TokenErrorReporter, ERC20 {
      * @param owner The address of the account to query
      * @return The amount of underlying owned by `owner`
      */
-    function balanceOfUnderlying(address owner) public returns (uint) {
+    function balanceOfUnderlying(address owner) public view returns (uint) {
       uint underlyingBalance = EIP20Interface(underlying).balanceOf(address(this));
       if (balanceOf(owner) == 0) return 0;
       return (totalSupply().mul(1e18).div(balanceOf(owner))).mul(underlyingBalance).div(1e18);
