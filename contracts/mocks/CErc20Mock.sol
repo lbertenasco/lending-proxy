@@ -5,8 +5,9 @@ import 'openzeppelin-solidity/contracts/token/ERC20/ERC20.sol';
 import '../compound/EIP20NonStandardInterface.sol';
 import '../compound/EIP20Interface.sol';
 import '../compound/ErrorReporter.sol';
+import '../compound/ReentrancyGuard.sol';
 
-contract CErc20Mock is TokenErrorReporter, ERC20 {
+contract CErc20Mock is ReentrancyGuard, TokenErrorReporter, ERC20 {
     using SafeMath for uint;
 
     bool public constant isCToken = true;
@@ -95,7 +96,7 @@ contract CErc20Mock is TokenErrorReporter, ERC20 {
      * @param owner The address of the account to query
      * @return The amount of underlying owned by `owner`
      */
-    function balanceOfUnderlying(address owner) public returns (uint) {
+    function balanceOfUnderlying(address owner) public view returns (uint) {
       uint underlyingBalance = EIP20Interface(underlying).balanceOf(address(this));
       if (balanceOf(owner) == 0) return 0;
       return (totalSupply().mul(1e18).div(balanceOf(owner))).mul(underlyingBalance).div(1e18);
@@ -110,6 +111,15 @@ contract CErc20Mock is TokenErrorReporter, ERC20 {
         tokenValueExp = totalUnderlying.div(totalSupply());
       }
       return tokenValueExp;
+    }
+    
+    /**
+     * @notice Accrue interest then return the up-to-date exchange rate
+     * @return Calculated exchange rate scaled by 1e18
+     */
+    function exchangeRateCurrent() public nonReentrant returns (uint256) {
+        // require(accrueInterest() == uint(Error.NO_ERROR), "accrue interest failed");
+        return exchangeRateStored();
     }
 
     function exchangeRateStored() public view returns (uint) {
