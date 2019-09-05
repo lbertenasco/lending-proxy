@@ -1,4 +1,8 @@
+### Official Compound repository now available: https://github.com/compound-finance/compound-protocol
+> You should use this for reference and best practices.
+
 # Compound v2 proxy
+
 Example repository to hold and calculate earnings for accounts depositing erc20 tokens into compound via a proxy smart contract.
 Helpful for stake-to-play, stake-to-buy, stake-to-etc.. dapps.
 
